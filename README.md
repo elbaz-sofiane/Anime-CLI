@@ -4,6 +4,9 @@
 
 Actuelement oppérationnel pour https://anime-sama.tv ( change souvent et j'essayerais de le mettre a jour ! )
 
+<img src="https://img.shields.io/badge/Version-1.0.1-blue?logo=github">
+
+
 ---
 Un client en ligne de commande pour regarder des animes depuis [anime-sama.si](https://anime-sama.si) directement dans votre terminal.
 
