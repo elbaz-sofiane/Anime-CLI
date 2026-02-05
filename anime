@@ -498,7 +498,7 @@ def show_link_and_prompt(video_url, anime_name, episode_number, saison, season_u
     """Affiche le lien et propose les options suivant/quitter"""
     print()
     print(GREEN + "=" * 60 + RESET)
-    print(BOLD + CYAN + "🔗 LIEN DE LECTURE : " + RESET)
+    print(BOLD + CYAN + "🔗 LIEN DE LECTURE (ctrl+click) : " + RESET)
     print()
     print(BOLD + YELLOW + video_url + RESET)
     print()
