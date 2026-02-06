@@ -38,7 +38,7 @@ check_install() {
 }
 
 check_install "Python3" "python3"
-check_install "pip3" "pip3"
+check_install "pip" "pip"
 check_install "fzf" "fzf"
 check_install "dos2unix" "dos2unix"
 
