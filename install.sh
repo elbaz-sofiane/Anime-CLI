@@ -22,6 +22,8 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+apt-get update
+
 check_install() {
     PKG="$1"
     CMD="$2"
