@@ -23,7 +23,7 @@ RESET = X = '\033[0m'
 BOLD = '\033[1m'
 
 # Version du programme
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 # Configuration
 MAX_CACHE_SIZE = 100
@@ -31,8 +31,49 @@ CACHE_TTL = 900
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 10
 
-# Site de base
-BASE_URL = "https://anime-sama.tv"
+# Site de base (modifiable via --url, persisté dans la config)
+DEFAULT_BASE_URL = "https://anime-sama.tv"
+
+def get_config_path():
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    return os.path.join(script_dir, "config")
+
+def load_base_url():
+    config_path = get_config_path()
+    try:
+        with open(config_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("BASE_URL="):
+                    return line.split("=", 1)[1].strip()
+    except FileNotFoundError:
+        pass
+    return DEFAULT_BASE_URL
+
+def save_base_url(url):
+    if os.geteuid() != 0:
+        print(f"\n{RED}✗ Permission refusée: modification de la config requiert les droits root.{RESET}", file=sys.stderr)
+        print(f"{YELLOW}💡 Relancez avec: sudo anime-sama-cli --url {url}{RESET}", file=sys.stderr)
+        sys.exit(1)
+    config_path = get_config_path()
+    lines = []
+    found = False
+    try:
+        with open(config_path, 'r') as f:
+            for line in f:
+                if line.startswith("BASE_URL="):
+                    lines.append(f"BASE_URL={url}\n")
+                    found = True
+                else:
+                    lines.append(line)
+    except FileNotFoundError:
+        pass
+    if not found:
+        lines.append(f"BASE_URL={url}\n")
+    with open(config_path, 'w') as f:
+        f.writelines(lines)
+
+BASE_URL = load_base_url()
 
 # Pre-compiled regex patterns
 PANNEAU_PATTERN = re.compile(r'panneauAnime\("([^"]+)",\s*"([^"]+)"\)')
@@ -278,9 +319,10 @@ class AnimeDownloader:
     def get_catalogue(self, query="", vf=False):
         try:
             url = f"{BASE_URL}/catalogue/"
+            host = BASE_URL.replace("https://", "").replace("http://", "").split("/")[0]
             headers = {
                 **HEADERS_BASE,
-                "host": "anime-sama.tv",
+                "host": host,
                 "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "referer": f"{BASE_URL}/catalogue/",
             }
@@ -344,7 +386,7 @@ class AnimeDownloader:
 
     def get_episode_list(self, url):
         headers = {
-            "host": "anime-sama.tv",
+            "host": BASE_URL.replace("https://", "").replace("http://", "").split("/")[0],
             "user-agent": "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0",
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "accept-language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -369,7 +411,6 @@ class AnimeDownloader:
 
             all_links = {}
 
-            # Rechercher les patterns Sibnet et Vidmoly
             sibnet_matches = list(re.finditer(r'https://video\.sibnet\.ru/shell\.php\?videoid=(\d+)', content))
             vidmoly_matches = list(re.finditer(r'https://vidmoly\.(?:to|net)/embed-([^.]+)\.html', content))
 
@@ -505,7 +546,6 @@ def show_link_and_prompt(video_url, anime_name, episode_number, saison, season_u
     print(GREEN + "=" * 60 + RESET)
     print()
 
-    # Sauvegarder dans l'historique
     add_to_history(
         anime_name=anime_name,
         episode_number=episode_number,
@@ -513,7 +553,6 @@ def show_link_and_prompt(video_url, anime_name, episode_number, saison, season_u
         url=season_url
     )
 
-    # Proposer les options
     has_next = current_index + 1 < len(ep_keys)
 
     if has_next:
@@ -526,7 +565,6 @@ def show_link_and_prompt(video_url, anime_name, episode_number, saison, season_u
             choice = input(f"{CYAN}Votre choix (n/q): {RESET}").strip().lower()
 
             if choice == 'n':
-                # Lire l'épisode suivant
                 next_index = current_index + 1
                 next_ep = ep_keys[next_index]
                 next_video_data = episodes[next_ep]
@@ -541,7 +579,6 @@ def show_link_and_prompt(video_url, anime_name, episode_number, saison, season_u
                 if next_video_url.startswith('//'):
                     next_video_url = 'https:' + next_video_url
 
-                # Récursion pour continuer
                 show_link_and_prompt(next_video_url, anime_name, next_episode_number, saison,
                                    season_url, episodes, ep_keys, next_index, downloader)
             else:
@@ -556,6 +593,8 @@ def show_link_and_prompt(video_url, anime_name, episode_number, saison, season_u
         print(YELLOW + "✓ Dernier épisode de la saison!" + RESET)
 
 def main():
+    global BASE_URL
+
     show_banner()
     check_deps()
 
@@ -568,23 +607,40 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Mode debug")
     parser.add_argument("-h", "--help", action="store_true", help="Afficher l'aide")
     parser.add_argument("--clear-history", action="store_true", help="Supprimer tout l'historique")
+    parser.add_argument(
+        "--url",
+        metavar="URL",
+        help=f"URL de base du site (défaut: {BASE_URL})"
+    )
 
     args = parser.parse_args()
+
+    # Appliquer et sauvegarder l'URL personnalisée
+    if args.url:
+        custom_url = args.url.rstrip('/')
+        if not custom_url.startswith(('http://', 'https://')):
+            custom_url = 'https://' + custom_url
+        BASE_URL = custom_url
+        save_base_url(BASE_URL)
+        print(GREEN + f"✓ URL sauvegardée définitivement: {BASE_URL}" + RESET)
+        print(CYAN + f"  (config: {get_config_path()})" + RESET)
 
     if args.help:
         print(f"""
 {BOLD}{CYAN}Usage:{RESET} anime-sama-cli [OPTIONS] [TERME_RECHERCHE]
 
 {BOLD}Options:{RESET}
+    --url URL           Changer l'URL de base définitivement (ex: https://anime-sama.fr)
     --vf                Rechercher uniquement en VF (doublage français)
     --debug             Activer le mode debug
     --clear-history     Supprimer l'historique
     -h, --help          Afficher cette aide
 
 {BOLD}Exemples:{RESET}
-    anime-sama-cli                      # Recherche interactive
-    anime-sama-cli naruto               # Rechercher "naruto"
-    anime-sama-cli --vf one piece       # Rechercher "one piece" en VF
+    anime-sama-cli                              # Recherche interactive
+    anime-sama-cli naruto                       # Rechercher "naruto"
+    anime-sama-cli --vf one piece               # Rechercher "one piece" en VF
+    anime-sama-cli --url https://anime-sama.fr  # Utiliser un autre domaine
 
 {BOLD}Fonctionnalités:{RESET}
     • Historique visuel : Les épisodes vus sont marqués d'une ✓
@@ -598,7 +654,6 @@ def main():
         """)
         return
 
-    # Clear history
     if args.clear_history:
         clear_history()
         sys.exit(0)
@@ -609,7 +664,7 @@ def main():
         query = search_prompt()
 
     print()
-    print(BOLD + CYAN + f"╭─ 🔍 Recherche sur anime-sama.tv..." + RESET)
+    print(BOLD + CYAN + f"╭─ 🔍 Recherche sur {BASE_URL}..." + RESET)
     print(CYAN + f"╰─➤ " + YELLOW + f'Requête: "{query}"' + RESET)
 
     try:
@@ -681,7 +736,6 @@ def main():
 
     selected_season = seasons[season_index]
 
-    # Construire l'URL de la saison
     season_path = selected_season['url']
     if not season_path.startswith('http'):
         if season_path.startswith('/'):
@@ -705,7 +759,6 @@ def main():
     if not episodes:
         die("Aucun épisode trouvé")
 
-    # Préparer les informations pour l'historique
     saison = selected_season['name']
     if "saison" not in saison.lower():
         saison = f"Saison {season_index + 1}"
@@ -714,7 +767,6 @@ def main():
     if version_str.lower() not in saison.lower():
         saison = f"{saison} - {version_str}"
 
-    # Récupérer les épisodes déjà vus
     watched_episodes = get_watched_episodes(anime_name, saison)
     last_watched = get_last_watched_episode(anime_name, saison)
 
@@ -725,15 +777,11 @@ def main():
     ep_items = []
     ep_keys = sorted(episodes.keys(), key=lambda x: int(x))
 
-    # Créer la liste avec marqueurs visuels
     for ep_key in ep_keys:
         episode_data = episodes[ep_key]
         ep_num = int(ep_key)
 
-        # Marqueur pour épisode vu
         marker = " [Déjà VU ✓]" if ep_num in watched_episodes else ""
-
-        # Marqueur pour dernier épisode vu
         if ep_num == last_watched:
             marker = " [Déjà VU ✓]"
 
@@ -754,17 +802,14 @@ def main():
     if args.debug:
         print(f"[DEBUG] Utilisateur a sélectionné: {selected_episode_str}")
 
-    # Extraction du numéro d'épisode
     selected_episode_clean = selected_episode_str.replace(" [Déjà VU ✓]", "").strip()
 
-    # Trouver l'index dans la liste
     try:
         ep_index = ep_items.index(selected_episode_str)
         selected_ep = ep_keys[ep_index]
         if args.debug:
             print(f"[DEBUG] Index trouvé: {ep_index}, Episode key: {selected_ep}")
     except ValueError:
-        # Fallback: extraction par regex
         match = re.search(r'Episode (\d+)', selected_episode_clean)
         if match:
             ep_num = match.group(1)
@@ -788,7 +833,6 @@ def main():
     if video_url.startswith('//'):
         video_url = 'https:' + video_url
 
-    # Mode lien uniquement
     show_link_and_prompt(video_url, anime_name, episode_number, saison, season_url,
                        episodes, ep_keys, ep_index, downloader)
 
