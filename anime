@@ -32,7 +32,7 @@ MAX_RETRIES = 3
 REQUEST_TIMEOUT = 10
 
 # Site de base (modifiable via --url, persisté dans la config)
-DEFAULT_BASE_URL = "https://anime-sama.tv"
+DEFAULT_BASE_URL = "https://anime-sama.to"
 
 def get_config_path():
     script_dir = os.path.dirname(os.path.realpath(__file__))
