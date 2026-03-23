@@ -20,7 +20,7 @@ Basé sur [ani-cli](https://github.com/pystardust/ani-cli) et [anisama-cli](http
 - 📺 **Support VF et VOSTFR** 
 - 📚 **Historique des épisodes** regardés
 - ⚡ **Navigation automatique** entre les épisodes
-- 🌐 **Modifié l'URL afin de l'actualisé
+- 🌐 **Modifié l'URL** afin de l'actualisé
 ---
 
 ## 🚀 Installation
