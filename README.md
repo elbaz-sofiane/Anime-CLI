@@ -31,7 +31,7 @@ Installation depuis le dépôt cloné
 ```bash
 # Cloner le dépôt
 git clone https://github.com/elbaz-sofiane/Anime-Sama.git
-cd Anime-Sama
+cd Anime-CLI
 
 # Rendre le script d'installation exécutable
 chmod +x install.sh
